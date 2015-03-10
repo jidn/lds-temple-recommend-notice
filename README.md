@@ -37,7 +37,7 @@ Install
 First, you need to have python installed.  Refer to [python download](https://www.python.org/downloads/) and install a 2.7 release.  I have not tested
 with a 3.X release.
 
-Install LDS-org, lxml, and markdown.  [LDS-org](https://pypi.python.org/pypi/LDS-org) accesses the [LDS.org](www.lds.org) website using your username/password credentials, lxml parses the recommend information from LDS.org, and markdown formats your emails
+Install LDS-org, lxml, and markdown.  [LDS-org](https://pypi.python.org/pypi/LDS-org) accesses the [LDS.org](https://www.lds.org) website using your username/password credentials, lxml parses the recommend information from LDS.org, and markdown formats your emails
 
     pip install LDS-org markdown lxml
 
