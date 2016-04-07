@@ -1,53 +1,94 @@
 """
 Calling:
-    param callingName: calling
-    param groupname: organization or group
-    param individualId: personal identifying number
-    param groupInstance: number
-    param groupKey: number
-    param positionId: number
+    callingName: calling
+    groupname: organization or group
+    individualId (int): personal identifying number
+    groupInstance (int): number
+    groupKey (int): number
+    positionId (int): number
+
+Calling-v2:
+    list of dicts with the following:
+        displayOrder (int):
+        instanceId (int):
+        name (str): Organization name
+        orgTypeId (int):
+        assignmentsInGroup (list): of dicts with following:
+            dateActivated: long integer, epoch?
+            dateSetApart: long integer, epoch?
+            displayOrder (int):
+            individualId (int):
+            positionName (str): calling title
+            positionTypeId (int):
+            setApartFlg (bool):
 
 Household:
     This is a list of households.  Every household has a single head
     of house.  Other people include 'spouse', and 'children'.
 
     param dict headOfHouse:
-        param surname: 'Surname'
-        param formattedName: 'Surname, First'
-        param directoryName: 'Surname, First'
-        param givenName1: 'First Middle'
-        param preferredName: 'Last, Prefered'
-        param photoUrl: URL
-        param individualId: unique number
-        param memberId: membership number
-        param birthdate:
-        param email: personal email
-        param phone: personal phone number
-    param dict spouse: see headOfHouse
-    param list children: list similar to headOfHouse
-    param str  coupleName: 'Surname, First & First' or formattedName
-    param str  emailAddress: household email
-    param str  phone: household number
-    param str  householdName: Surname
-    param URL  familyPhotoUrl: URL
-    param bool hidHouseholdPhoto:
-    param str  headOfHouseIndividualId: sames as headOfHouse['individualId']
-    param latitude:
-    param longitude:
-    param optOut:
+        surname: 'Surname'
+        formattedName: 'Surname, First'
+        directoryName: 'Surname, First'
+        givenName1: 'First Middle'
+        preferredName: 'Last, Prefered'
+        photoUrl: URL
+        individualId: unique number
+        memberId: membership number
+        birthdate:
+        email: personal email
+        phone: personal phone number
+    spouse (dict): see headOfHouse
+    children (list): list similar to headOfHouse
+    coupleName (str): 'Surname, First & First' or formattedName
+    emailAddress (str): household email
+    phone (str): household number
+    householdName (str): Surname
+    familyPhotoUrl (str): URL
+    hidHouseholdPhoto (bool):
+    headOfHouseIndividualId (str): sames as headOfHouse['individualId']
+    latitude:
+    longitude:
+    optOut:
 
     # Address information
-    param desc1: address line 1
-    param desc2: address line 2
-    param desc3: address line 3
-    param desc4: address line 4
-    param desc5: address line 5
-    param city: address city
-    param state: address state
-    param postalCode: address postal code
+    desc1: address line 1
+    desc2: address line 2
+    desc3: address line 3
+    desc4: address line 4
+    desc5: address line 5
+    city: address city
+    state: address state
+    postalCode: address postal code
 
+Household-v2
+    List of dicts with the following
+
+    coupleName (str): Last, Husband & Wife
+    emailAddress (str?): Household email adress
+    phone (str?): formatted phone number
+    headOfHouse (dict):
+        email (str?): individual email
+        phone (str?): individual formatted phone number
+        fullName (str): Last, first middle
+        givenName (str): first middle
+        preferredName (str): Last, first
+        surname (str): Last
+        individualId (int):
+        memberID (str): membership number with dashes
+    spouse (dict?): Same as headOfHouse
+    children (list?): List of dict same as headOfHouse
+    headOfHouseIndividualId (int):
+    householdName (str): Last
+    includeLatLong (bool):
+    latitude (float):
+    longitude (float):
+    desc1 (str): first line of address
+    desc2 (str): second line of address
+    descN (str): formatted "City, State ZIP'
+    state (str): long state name
+    postalCode (str): zipcode
 """
-import lds_org
 
 
 class Membership(object):
@@ -57,6 +98,11 @@ class Membership(object):
         'callings'
         'unitNo'
     """
+    def __init__(self, data):
+        self._callings = data['callings']
+        self._households = data['households']
+        self._unitNo = data['unitNo']
+        self._make_membership()
 
     def __getitem__(self, item):
         "Search membership by individualId or durname"
@@ -67,30 +113,10 @@ class Membership(object):
         """
         return [_ for _ in self._callings if lens(_)]
 
-    def get(self, lds=None):
-        endpoint = 'unit-members-and-callings'
-        if lds:
-            rv = lds.get(endpoint)
-            assert rv.status_code == 200
-            self.data = rv.json()
-        else:
-            with lds_org.session as lds:
-                rv = lds.get('unit-members-and-callings')
-                assert rv.status_code == 200
-                self.data = rv.json()
-
-        self._callings = self.data['callings']
-        self._households = self.data['households']
-        self._unitNo = self.data['unitNo']
-
-        self._make_membership()
-        return self
-
     def bishopric(self):
         """Returns a dict of bishopric excluding any assistant clerks.
         Keys are: bishop, counselor1, counselor2, wardclerk, exec_sec
         Values are the same as any member, but also adds 'callingName'
-
         """
         lens = lambda x: x['groupName'] == 'Bishopric' and 'Assistant' not in x['callingName']
         data = {}

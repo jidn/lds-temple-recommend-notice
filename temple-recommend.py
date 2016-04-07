@@ -4,9 +4,11 @@
 Config Example
 -------------------------------------------------------
 """
+import pdb
 import os
 import sys
 import codecs
+import pprint
 import calendar
 import datetime
 from textwrap import dedent, wrap
@@ -18,14 +20,14 @@ try:
     import lds_org
 except ImportError:
     print("Be sure to use import needed requirements:")
-    print("  lds_org  markdown and lxml")
+    print("  lds_org, markdown, and lxml")
     sys.exit(1)
 import markdown
 from lxml.html import fromstring
 
 
 BASEDIR = os.path.dirname(__file__)
-RECOMMEND_URL = "https://www.lds.org/mls/mbr/recommend/recommend-status?lang=eng"
+RECOMMEND_URL = "https://www.lds.org/mls/mbr/recommend/recommend-status?lang=eng&unitNumber=%@"
 
 def date_from_8(date):
     """YYYYMM00 to 'YYYY Month'
@@ -52,13 +54,17 @@ def expired_and_expiring(lds=None, html=None):
     }
     """
     people = {}
-    if lds is None and html is None:
-        with lds_org.session as lds:
+    if html is None:
+        if lds is None and html is None:
+            with lds_org.session as lds:
+                rv = lds.get(RECOMMEND_URL)
+                html = rv.text
+        elif lds:
             rv = lds.get(RECOMMEND_URL)
             html = rv.text
-    elif lds:
-        rv = lds.get(RECOMMEND_URL)
-        html = rv.text
+
+        with open('html.html', 'wt') as out:
+            out.write(html)
 
     doc = fromstring(html)
     recommends = "//table[@id='dataTable']/tbody/tr"
@@ -150,7 +156,8 @@ class Email(object):
             to_addrs.extend(email['Bcc'].split(COMMASPACE))
             del email['Bcc']
 
-        print "Subject: {0[Subject]}\nTo: {0[To]}\nBcc: {0[Bcc]}\n{1}\n".format(email, to_addrs)
+        print("Subject: {0[Subject]}\nTo: {0[To]}\nBcc:"
+              "{0[Bcc]}\n{1}\n".format(email, to_addrs))
         return smtp.sendmail(email['From'], to_addrs, email.as_string())
 
 class Counselor(Email):
@@ -201,21 +208,28 @@ class Bishop(Email):
         return '\n'.join(text)
 
 
-def get_smtp(config):
-    if config.has_option('Testing', 'STDOUT_SERVER') and config.getboolean('Testing', 'STDOUT_SERVER'):
-        class SMTPStdout(object):
-            def sendmail(self, from_addr, to_addrs, msg):
-                print("-"*60)
-                print(msg.split('\n\n')[0])
-                print(to_addrs)
+class SMTPStdout(object):
+    def sendmail(self, from_addr, to_addrs, msg):
+        print("-"*60)
+        print(msg.split('\n\n')[0])
+        print(to_addrs)
 
-            def quit(self):
-                return True
+    def quit(self):
+        return True
+
+
+def get_smtp(config):
+    pdb.set_trace()
+    if config.has_option('Testing', 'STDOUT_SERVER') and config.getboolean('Testing', 'STDOUT_SERVER'):
+        return SMTPStdout()
+
+    domain = config.get('SMTP', 'DOMAIN')
+    if not domain:
         return SMTPStdout()
 
     domain = config.get('SMTP', 'DOMAIN').split(':')
     params = {}
-    if len(domain)> 1:
+    if len(domain) > 1:
         params['port'] = int(domain[1])
 
     server = smtplib.SMTP(domain[0], **params)
@@ -226,12 +240,19 @@ def get_smtp(config):
     return server
 
 def ward_stake_name(lds):
+    """Get the ward name and the stake name for the current user."""
     rv = lds.get('current-user-units')
     assert rv.status_code == 200
     data = rv.json()[0]
     for unit in data['wards']:
         if unit['wardUnitNo'] == int(lds.unitNo):
             return unit['wardName'], unit['stakeName']
+
+
+def dump_cookies(fetcher, filename):
+    with open(filename, 'wt') as out:
+        out.write(pprint.pformat(fetcher.cookies.get_dict()))
+
 
 if __name__ == "__main__":
     import argparse
@@ -243,18 +264,30 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('config', help='configuration file')
+    parser.add_argument('--no-email', help='absolutely no email')
+    parser.add_argument('--html', help='Test parsing of html file')
     args = parser.parse_args()
+
+    if args.html:
+        html = open(args.html, 'rt').read()
+        pdb.set_trace()
+        d = expired_and_expiring(None, html)
+        print(d)
+        sys.exit(0)
 
     config = configparser.ConfigParser()
     config.read(args.config)
 
-    server = get_smtp(config)
+    server = None if args.no_email else get_smtp(config)
     ldsorg = lds_org.LDSOrg(config.get('LDS.org', 'username'),
                             config.get('LDS.org', 'password'), signin=True)
+    dump_cookies(ldsorg, '01-after-signin.txt')
     wardName, stakeName = ward_stake_name(ldsorg)
-    membership = Membership()
-    membership.get(ldsorg)
+    dump_cookies(ldsorg, '02-after-ward-stake.txt')
+#    membership = Membership()
+#    membership.get(ldsorg)
     groups = expired_and_expiring(ldsorg)
+    sys.exit(0)
     bishopric = membership.bishopric()
 
     reports = {}
@@ -280,7 +313,7 @@ if __name__ == "__main__":
             params['To'] = COMMASPACE.join((bishopric['counselor1']['email'],
                                             bishopric['counselor2']['email']))
         email = Counselor(reports).make(**params)
-        Email.send(email, server)
+    #    Email.send(email, server)
 
     if config_send('Email', 'BISHOP'):
         params['Subject'] = 'Temple recommends expired'
@@ -288,7 +321,7 @@ if __name__ == "__main__":
             params['To'] = COMMASPACE.join((bishopric['bishop']['email'],
                                             bishopric['exec_sec']['email']))
         email = Bishop(reports).make(**params)
-        Email.send(email, server)
+    #    Email.send(email, server)
 
 
     params = dict(wardName=wardName, stakeName=stakeName)
@@ -313,7 +346,8 @@ if __name__ == "__main__":
             to_addrs.append(config.get('Email', 'BCC_ADDR'))
         if not to_addrs:
             continue
-        print "Subject: {0[Subject]}\nTo: {0[To]}\n{1}\n".format(msg, to_addrs)
-        server.sendmail(msg['From'], to_addrs, msg.as_string())
+        print("Subject: {0[Subject]}\nTo: {0[To]}\n{1}\n"
+              .format(msg, to_addrs))
+    #    server.sendmail(msg['From'], to_addrs, msg.as_string())
 
     server.quit()
