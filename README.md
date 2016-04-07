@@ -14,15 +14,9 @@ email notices on expiring recommends.
 The information is all on the LCR report.  I use that report to create
 any of the the following:
 
-  * Bishop / Executive Secretary email with the content of that report.
-    This does nothing but actively push this information to the bishop.
-  * Counselors email on only the expiring recommends, which are the
-    only ones they can renewal.
-  * Undisclosed recipants to the individuals in the groups:
-    - Expiring next month
-    - Expiring this month
-    - Expired less than one month
-    - Expired over three months
+  * Bishop email with included reports.
+  * Counselors email with included reports.
+  * Member emails
 
 I wanted to create something that can be used with limited knowledge
 in Python, so I have a configuration file handling most of the options.
@@ -79,7 +73,19 @@ we put the information needed to send all of our different emails.
 
 *PASSWORD:* the password you use to send/receive email
 
-*DOMAIN:* the domain name and optionally the port used to send email. For example google uses "smtp.gmail.com:587"
+*DOMAIN:* the domain name and optionally the port used to send email. For example google uses "smtp.gmail.com:587".
+
+Before you send out emails, you may want to verify they work and look correctly.
+It is a good test to verify emails *To*, *From*, *Subject*, and other email headers.
+
+One way is to comment out the domain and use will use a fake smtp server.
+It overrides all the options in the SMTP section.
+Instead of sending email, It just shows the email as if it was sending it out.
+This isn't going to be readable, but you can check *To*, *From*, *Subject*, and any other email header.
+
+You could also use a online service like mailtrap.io to view the emails.
+Its advantage of seeing the email in HTML can be a great time saver.
+It also shows you spam assassin scores if you think your email is getting blocked at the service provider level.
 
 *TLS:* Do we use transport layer security? This should be yes for secure email and your email provider should use this.
 
@@ -89,26 +95,34 @@ we put the information needed to send all of our different emails.
     DOMAIN = smtp.gmail.com:587
     TLS = true
 
-### Testing
+### Temple-Reports
 
-Before you send out emails, you may want to verify they work and look
-correctly.  Here are some options that can help you.
+Here you generate expired or expiring reports.
+For each report you need four pieces of information: a name, start month, end month, report title.  Because I like things to line up, start and end are labeled head and tail.
 
-*STDOUT_SERVER:* This is a fake smtp server.  It overrides all the
-    options in the SMTP section. Instead of sending email, It just
-    shows the email as if it was sending it out.  This isn't going
-    to be readable, but you can check *To*, *From*, *Subject*, and
-    any other email header.  It is a good test to verify emails are
-    going to the people you think they are.
+The name is only used is recording the other three.  It is used as a prefix for the other configurations.
 
-*TO_ADDR:* Send all emails to this email address or addresses, instead
-    of their indended recipients.  This way you can check all the
-    emails and notices.  If you specify more than one, seperate them
-    with a comma and a space.
+*Head:* With the current month being the number 0, how many months from now will the report start.
+-1 is last month and 1 is next month.
 
-    [Testing]
-    STDOUT_SERVER = false
-    #TO_ADDR
+*Tail:* With the current month being the number 0, the number of months from now will the report end.
+-1 is last month and 1 is next month.
+*Tail* must be equal or larger than *head*.
+
+*Title"* The report title that will appear in the email.
+
+For example, a report listing recommends expiring in the current month would look something like
+
+    current_head = 0
+    current_tail = 0
+    current_title = Expiring This Month
+
+For a report of those expiring in the last three months would look like
+
+    last3month_head = -3
+    last3month_tail = -1
+    last3month_title = Expired in the Last Three Months
+
 
 ### Email
 
@@ -121,34 +135,50 @@ correctly.  Here are some options that can help you.
 *BCC_ADDR:* Send a copy of all emails to this person or persons.  Comment
     out this line if you don't wish to use it.
 
-*BISHOP:*  Send an email to the bishop and executive secretary.  This
-    contains the same information as found on the LDS report.
+*BISHOP-MSG:* The message to send to the bishop.  Any reports will come after
+    this message.
 
-*COUNSELOR:* Send an email to the two bishop counselors containing the
-    list of recommends that are about to expire.
+*BISHOP-REPORTS:*  A sequence of report names to send to the bishop.
+    For example, In the reports section we had a report named `current` and
+    another named `last3month`.  To send the bishop those two reports we
+    would have
 
-*EXPIRING_NEXT_MONTH:* The template file used to send a email to those
-    whos recommend will be expiring next month.
+        BISHOP-REPORTS = current last3month
 
-*EXPIRING_THIS_MONTH:* The template file used to send a email to those
-    whos recommend will be expiring this month.
+*COUNSELOR-MSG:* The message to send to the counselor using any valid
+    markdown.  Any reports will come after this message.  This email
+    will also be carbon copied to the bishop.
 
-*EXPIRED_LESS_THAN_1_MONTH:* The template file used to send an email to
-    those whos recommend has expired less than one month.
+*COUNSELOR-REPORTS:* This is the same as *BISHOP-REPORTS* only for the
+    counselor email.
 
-*EXPIRED_LAST_3_MONTHS:* The template file used to send an email to
-    those whos recommend has expired within the last three months.
+*MEMBER:* The template file used to send messages to members about their
+    recommends.  This can include any valid markdown formatting. Any
+    bishopric information will be substituted.
 
-*EXPIRED_OVER_3_MONTHS:* The template file used to send an email to
-    those whos recommend has expired over three months.  I don't
-    expect many to use this, but it is here for completeness.
+*MEMBER_head:* With the current month being the number 0, 1 being next month,
+    and -1 being last month.  Which month should I start getting expired
+    recommends.
+
+*MEMBER_tail:* With the current month being the number 0, 1 being next month,
+    and -1 being last month, which month should I stop getting expired recommends.
 
     [Email]
-    BISHOP = true
-    COUNSELOR = true
-    EXPIRING_NEXT_MONTH = expiring-next-month.md
-    EXPIRING_THIS_MONTH = expiring-this-month.md
-    #EXPIRED_OVER_3_MONTHS =
+    BISHOP-REPORTS = last3month
+    BISHOP_MSG = Bishop,
+
+        Here is the list of recommends which expired in the last three weeks.
+
+    COUNSELOR-REPORTS = current
+    COUNSELOR-MSG: Counselor,
+
+        Here is a list of recommnds that expire this month. please see if you
+        can help them renew their recommend.
+
+
+    MEMBER = expire-soon.md
+    MEMBER_head = 0
+    MEMBER_tail = 0
 
 Template
 --------------------------------
