@@ -1,0 +1,18 @@
+image: registry.gitlab.com/python/alpine3.6
+
+before_script:
+  - python -v
+  - pip install -r requirements.txt
+
+test:
+  script:
+  - python recommends.py
+  - python recommends.py -t
+  except:
+  - master
+
+monthly:
+  script:
+  - python recommends.py -t
+  except:
+  - master
