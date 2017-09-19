@@ -31,9 +31,10 @@ I wanted to create something that can be used with limited knowledge
 in Python, so I have a configuration file handling most of the options.
 
 There are two ways to run this.  Either install the software on your computer or use the cloud.  I am going to recommend using the cloud for the following reasons.
-    1. You don't need to use your personal computer with all the associated
-       software maintance.
-    2. You can have the cloud automatically schedule the emails.
+
+  1. You don't need to use your personal computer with all the associated
+     software maintance.
+  2. You can have the cloud automatically schedule the emails.
 
 Go to the Wiki and I'll walk you through setting up your own temple recommend
 expiring reminder system.
