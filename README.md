@@ -16,10 +16,10 @@ members using the wards current callings and email addresses in LDS.org.
 No need to twiddle with settings as people come and go in their callings.
 
 Temple recommend information is on LDS.org, but this uses the
-(LDS-org)[https://github.com/jidn/LDS-org] module to easily get data from the
-*temple-recommend-status* endpoint.
-The information is all on the LCR report.  I use that report to create
-any of the the following:
+(LDS-org)[https://github.com/jidn/LDS-org] module to easily get data from
+the *temple-recommend-status* endpoint.
+The information is all on the LCR report.  I use the source of that report
+to create any of the the following:
 
   * Bishop email with included reports.
   * Counselors email with included reports.
