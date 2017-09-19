@@ -2,3 +2,4 @@
 *.md
 *.cfg
 .*.swp
+.requirements.log

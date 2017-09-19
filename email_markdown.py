@@ -1,10 +1,4 @@
 # coding: utf8
-import pdb
-import os
-import sys
-import pprint
-import calendar
-import datetime
 from textwrap import dedent, wrap
 try:
     import ConfigParser as configparser
@@ -12,15 +6,12 @@ except ImportError:
     import configparser
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import email.utils
 import smtplib
 import markdown
 
-COMMASPACE = email.utils.COMMASPACE
-
 
 class Email(object):
-
+    """Created and send emails."""
     def title(self, title):
         return [title.title(), '-' * len(title), '']
 
@@ -33,13 +24,10 @@ class Email(object):
         append_to.append('')
 
     def make(self, body, **kwargs):
+        """Make HTML email with text version."""
         msg = MIMEMultipart('alternative')
         for k, v in kwargs.items():
             msg[k] = v
-        msg['Date'] = email.utils.formatdate()
-        # msg['Message-ID'] = email.utils.make_msgid(msg['Date'])
-        # It creates a localhost msgid which spamassassin ranks higher
-        # than not having it at all.
 
         msg.attach(MIMEText(body, 'text'))
 
@@ -60,20 +48,6 @@ class Email(object):
         msg.attach(MIMEText(html, 'html'))
         return msg
 
-    @staticmethod
-    def send(email, smtp):
-        to_addrs = email['To'].split(COMMASPACE)
-        if 'Cc' in email:
-            to_addrs.extend(email['Cc'].split(COMMASPACE))
-        if 'Bcc' in email:
-            to_addrs.extend(email['Bcc'].split(COMMASPACE))
-            del email['Bcc']
-
-        print("Subject: {0[Subject]}\nTo: {0[To]}\n"
-              "{1}\n".format(email, to_addrs))
-        print(email.as_string())
-        return smtp.sendmail(email['From'], to_addrs, email.as_string())
-
 
 class SMTPStdout(object):
     is_dummy = True
@@ -87,7 +61,7 @@ class SMTPStdout(object):
         return True
 
 
-def get_smtp(config_file):
+def get_smtp(config_file, section='SMTP'):
     """Get SMTP information from a config file.
 
     SMTP section in the config file looks like:
@@ -99,22 +73,29 @@ def get_smtp(config_file):
 
     Use your domain, username, and password.  This is showing the values
     for gmail.  Without a domain, it will just print to stdout.
+
+    Args:
+        config_file (str): filename
+        section (str): section in config_file, default "SMTP"
+
+    Returns:
+        smtplib.SMTP object
     """
     config = configparser.ConfigParser()
     config.read(config_file)
-    domain = config.get('SMTP', 'DOMAIN')
+    domain = config.get(section, 'DOMAIN')
     if not domain:
         return SMTPStdout()
 
-    domain = config.get('SMTP', 'DOMAIN').split(':')
+    domain = domain.split(':')
     params = {}
     if len(domain) > 1:
         params['port'] = int(domain[1])
 
     server = smtplib.SMTP(domain[0], **params)
-    if config.has_option('SMTP', 'TLS') and config.getboolean('SMTP', 'TLS'):
+    if config.has_option(section, 'TLS') and config.getboolean(section, 'TLS'):
         server.starttls()
 
-    server.login(config.get('SMTP', 'USERNAME'),
-                    config.get('SMTP', 'PASSWORD'))
+    server.login(config.get(section, 'USERNAME'),
+                 config.get(section, 'PASSWORD'))
     return server

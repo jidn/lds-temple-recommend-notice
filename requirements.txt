@@ -1,3 +1,3 @@
+LDS-org>=0.2
 markdown
-lxml
-selenium
+python-dateutil
