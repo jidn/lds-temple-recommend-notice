@@ -1,170 +1,158 @@
 # This helps with creating local virtual environments, requirements,
 # syntax checking, running tests, coverage and uploading packages to PyPI.
 # Homepage at https://github.com/jidn/python-Makefile
-# 
+#
 # This also works with Travis CI
 #
+# PACKAGE = Source code directory or leave empty
+PACKAGE =
+TESTDIR = tests
 PROJECT :=
-PACKAGE :=
-# Replace 'requirements.txt' with another filename if needed.
-REQUIRE_TXT := $(wildcard requirements.txt)
-# Directory with all the tests
-TESTDIR := tests
-TESTREQ_TXT := $(wildcard $(TESTDIR)/requirements.txt)
+ENV = .env
+# Override by putting on commandline:  python=python2.7
+python = python
+REQUIRE = requirements.txt
+PEP8_IGNORE := E501,E123
+PEP257_IGNORE := D104,D203
 ##############################################################################
-# Python settings
 ifdef TRAVIS
 	ENV = $(VIRTUAL_ENV)
-else
-	PYTHON_VERSION := 3.5
-	ENV := env
 endif
-
 # System paths
 BIN := $(ENV)/bin
 OPEN := xdg-open
 SYS_VIRTUALENV := virtualenv
-SYS_PYTHON := python$(PYTHON_VERSION)
 
 # virtualenv executables
 PIP := $(BIN)/pip
-PYTHON := $(BIN)/python
-FLAKE8 := $(BIN)/flake8
-PEP257 := $(BIN)/pep257
+TOX := $(BIN)/tox
+PYTHON := $(BIN)/$(python)
+ANALIZE := $(BIN)/pylint
+PEP257 := $(BIN)/pydocstyle
 COVERAGE := $(BIN)/coverage
-TESTRUN := $(BIN)/py.test
+TEST_RUNNER := $(BIN)/py.test
+$(TEST_RUNNER): env
+	$(PIP) install pytest | tee -a $(LOG_REQUIRE)
 
 # Project settings
+PKGDIR := $(or $(PACKAGE), ./)
+REQUIREMENTS := $(shell find ./ -name $(REQUIRE))
 SETUP_PY := $(wildcard setup.py)
-SOURCES := $(shell find $(PACKAGE) -name '*.py')
-TESTS :=   $(shell find $(TESTDIR) -name '*.py')
+SOURCES := $(or $(PACKAGE), $(wildcard *.py))
+COVERAGE_RC := $(wildcard default.coveragerc)
+ANALIZE_RC := $(wildcard default.pylintrc)
 EGG_INFO := $(subst -,_,$(PROJECT)).egg-info
+COVER_ARG := --cov-report term-missing --cov=$(PKGDIR) \
+	$(if $(wildcard default.coveragerc), --cov-config default.coveragerc)
 
 # Flags for environment/tools
-FLAG_CI := $(ENV)/.depends-ci
-FLAG_DEV := $(ENV)/.depends-dev
-LOG_REQ := $(ENV)/.requirements.txt
-LOG_TEST_REQ := $(ENV)/.requirements-test.txt
+LOG_REQUIRE := .requirements.log
 
-# Main Targets ###############################################################
+### Main Targets #############################################################
 .PHONY: all env ci help
-all: $(ENV)/.default-target
-$(ENV)/.default-target: env $(SETUP_PY) $(SOURCES)
-	$(MAKE) -s test
-	@touch $@
+all: check test
 
 # Target for Travis
 ci: test
 
+env: $(PIP) $(LOG_REQUIRE)
+$(PIP):
+	$(info "Environment is $(ENV)")
+	test -d $(ENV) || $(SYS_VIRTUALENV) --python $(python) $(ENV)
+
+$(LOG_REQUIRE): $(REQUIREMENTS)
+	for f in $(REQUIREMENTS); do \
+	  $(PIP) install -r $$f | tee -a $(LOG_REQUIRE); \
+	done
+	touch $@
+
 help:
 	@echo "env        Create virtualenv and install requirements"
+	@echo "             python=PYTHON_EXE   interpreter to use, default=python"
 	@echo "check      Run style checks"
-	@echo "test *     Run py.test with arguments on '$(TESTDIR)'"
-	@echo "pytest *   Run py.test -x --pdb with arguments on '$(TESTDIR)'"
-	@echo "coverage   Get coverage information"
+	@echo "test       TEST_RUNNER on '$(TESTDIR)'"
+	@echo "             args=\"-x --pdb --ff\"  optional arguments"
+	@echo "coverage   Get coverage information, optional 'args' like test"
+	@echo "tox        Test against multiple versions of python"
 	@echo "upload     Upload package to PyPI"
 	@echo "clean clean-all  Clean up and clean up removing virtualenv"
 
-# Environment Installation ###################################################
-env: $(PIP) $(LOG_REQ) $(ENV)/.setup.py
-$(PIP):
-	$(SYS_VIRTUALENV) --python $(SYS_PYTHON) $(ENV)
-	@$(MAKE) -s $(ENV)/.setup.py
-
-environ:
-ifneq ($(LDSORG_USERNAME),)
-	@echo "Environment username : $(LDSORG_USERNAME)"
-else
-	@eco "LDSORG_USERNAME is missing."
-endif
-
-$(LOG_REQ): $(REQUIRE_TXT)
-ifneq ($(REQUIRE_TXT),)
-	$(PIP) install --upgrade -r $(REQUIRE_TXT) | tee -a $(LOG_REQ)
-	# env requirements hook
-	$(info Upgrade or install $(REQUIRE_TXT) complete.)
-endif
-	@touch $@
-
-$(ENV)/.setup.py: $(SETUP_PY)
-ifneq ($(SETUP_PY),)
-	$(PIP) install -e .
-endif
-	@touch $@
-
 ### Static Analysis & Travis CI ##############################################
-.PHONY: check flake8 pep257
+.PHONY: check pyline pep257
+check: pylint pep257
 
-PEP8_IGNORED := E501,E123,D104,D203
-check: flake8 pep257
+$(ANALIZE): $(PIP)
+	$(PIP) install --upgrade pylint pydocstyle | tee -a $(LOG_REQUIRE)
 
-$(FLAG_CI): env
-	$(PIP) install --upgrade flake8 pep257
-	@touch $@  # flag to indicate dependencies are installed
+pylint: $(ANALIZE) $(ANALIZE_RC)
+	$(ANALIZE) $(SOURCES) $(TESTDIR) --ignore=$(PEP8_IGNORE)
 
-$(FLAG_DEV): env
-	$(PIP) install --upgrade wheel  # pygments wheel
-	@touch $@  # flag to indicate dependencies are installed
+pep257: $(ANALIZE)
+	$(PEP257) $(SOURCES) $(ARGS) --ignore=$(PEP257_IGNORE)
 
-flake8: $(FLAG_CI)
-	$(FLAKE8) $(or $(PACKAGE), $(SOURCES)) $(TESTDIR) --ignore=$(PEP8_IGNORED)
-
-pep257: $(FLAG_CI)
-	$(PEP257) $(or $(PACKAGE), $(SOURCES)) $(TESTDIR) --ignore=$(PEP8_IGNORED)
+$(ANALIZE_RC):
+	$(warning Missing project pylint configuration file default.pylintrc)
 
 ### Testing ##################################################################
-.PHONY: test pdb coverage
+.PHONY: test coverage tox
 
-TEST_COVERAGE := --cov $(PACKAGE) \
-				 --cov-report term-missing \
-				 --cov-report html 
+test: $(TEST_RUNNER)
+	$(TEST_RUNNER) $(args) $(TESTDIR)
 
-pytest: env $(LOG_TEST_REQ)
-	$(TESTRUN) $(TESTDIR) -x --pdb $(filter-out $@,$(MAKECMDGOALS))
+coverage: $(COVERAGE) default.coveragerc
+	$(TEST_RUNNER) $(args) $(COVER_ARG) $(TESTDIR)
 
-test: env $(LOG_TEST_REQ)
-	@$(MAKE) -s .clean-test
-	$(TESTRUN) $(TESTDIR) --last-failed $(filter-out $@,$(MAKECMDGOALS))
-
-$(LOG_TEST_REQ): $(TESTREQ_TXT)
-ifneq ($(TESTREQ_TXT),)
-	$(PIP) install --upgrade -r $(TESTREQ_TXT) | tee -a $(LOG_TEST_REQ)
-	@echo "Testing requirements installed."
+default.coveragerc:
+ifeq ($(PKGDIR),./)
+ifeq (,$(wildcard $(default.coveragerc)))
+	# If PKGDIR is root directory, ie code is not in its own directory
+	# then you should use a .coveragerc file to remove the ENV directory
+	# from the coverage search.  I'll auto generate one for you.
+	$(info Rerun make to discover autocreated .coveragerc)
+	@echo -e "[run]\nomit=$(ENV)/*" > default.coveragerc
+	@cat default.coveragerc
+	@exit 68
 endif
-	@touch $@
+endif
 
-coverage:
-	$(TESTRUN) -x $(TESTDIR) $(TEST_COVERAGE)
-	$(COVERAGE) html
-	$(OPEN) htmlcov/index.html
 
-# Cleanup ####################################################################
-.PHONY: clean clean-env clean-all .clean-build .clean-test .clean-dist
+$(COVERAGE): env
+	$(PIP) install pytest-cov | tee -a $(LOG_REQUIRE)
 
-clean: .clean-dist .clean-test .clean-build
-	@rm -rf $(ALL)
+tox: $(TOX)
+	$(TOX)
+
+$(TOX): $(PIP)
+	$(PIP) install tox | tee -a $(LOG_REQUIRE)
+
+### Cleanup ##################################################################
+.PHONY: clean clean-env clean-all clean-build clean-test clean-dist
+
+clean: clean-dist clean-test clean-build
 
 clean-env: clean
-	@rm -rf $(ENV)
+	-@rm -rf $(ENV)
+	-@rm -rf $(LOG_REQUIRE)
+	-@rm -rf .tox
 
 clean-all: clean clean-env
 
-.clean-build:
-#	@find -name $(PACKAGE).c -delete
-	@find $(PACKAGE) -name '*.pyc' -delete
-	@find $(TESTDIR) -name '*.pyc' -delete
-	@find $(PACKAGE) -name '__pycache__' -delete
-	@find $(TESTDIR) -name '__pycache__' -delete
-	@rm -rf $(EGG_INFO)
-	@rm -rf __pycache__
+clean-build:
+	@find $(PKGDIR) -name '*.pyc' -delete
+	@find $(PKGDIR) -name '__pycache__' -delete
+	@find $(TESTDIR) -name '*.pyc' -delete 2>/dev/null || true
+	@find $(TESTDIR) -name '__pycache__' -delete 2>/dev/null || true
+	-@rm -rf $(EGG_INFO)
+	-@rm -rf __pycache__
 
-.clean-test:
-	@rm -rf .coverage
+clean-test:
+	-@rm -rf .cache
+	-@rm -rf .coverage
 
-.clean-dist:
-	@rm -rf dist build
+clean-dist:
+	-@rm -rf dist build
 
-# Release ####################################################################
+### Release ##################################################################
 # For more information on creating packages for PyPI see the writeup at
 # http://peterdowns.com/posts/first-time-with-pypi.html
 .PHONY: authors register dist upload .git-no-changes
@@ -194,7 +182,7 @@ upload: .git-no-changes register
 		exit -1;                                  \
 	fi;
 
-# System Installation ########################################################
+### System Installation ######################################################
 .PHONY: develop install download
 # Is this section really needed?
 
